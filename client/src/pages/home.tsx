@@ -7,9 +7,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Copy, Link as LinkIcon, Image as ImageIcon, ArrowLeft, Sparkles, Upload } from "lucide-react";
+import { Copy, Link as LinkIcon, Image as ImageIcon, ArrowLeft, Sparkles, Upload, Wand2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import cakeImage from "@assets/generated_images/cute_3d_birthday_cake.png";
+
+const PREDEFINED_WISHES = [
+  "Hope your day is filled with joy, laughter, and lots of cake! 🎂✨",
+  "Wishing you a day that is as special in every way as you are! 🌟",
+  "Cheers to another trip around the sun! Keep shining bright! ☀️",
+  "May this year bring you endless happiness and amazing adventures! 🚀",
+  "Happy Birthday! May all your dreams come true this year! 🌠",
+  "Sending you a universe of good vibes on your special day! 🪐",
+  "Wishing you the happiest of birthdays and a fantastic year ahead! 🎉",
+  "Hope your birthday is as awesome as you are! 🎸",
+  "Eat cake, celebrate, and enjoy your special day! 🍰",
+  "May your day be filled with love, laughter, and unforgettable moments! ❤️"
+];
 
 export default function Home() {
   const [location, setLocation] = useLocation();
@@ -18,7 +31,7 @@ export default function Home() {
   
   // Default state
   const [name, setName] = useState("");
-  const [message, setMessage] = useState("Hope your day is filled with joy, laughter, and lots of cake! 🎂✨");
+  const [message, setMessage] = useState(PREDEFINED_WISHES[0]);
   const [imageSrc, setImageSrc] = useState(cakeImage);
   const [isViewMode, setIsViewMode] = useState(false);
   
@@ -91,6 +104,16 @@ export default function Home() {
     }
   };
 
+  const generateRandomWish = () => {
+    const randomWish = PREDEFINED_WISHES[Math.floor(Math.random() * PREDEFINED_WISHES.length)];
+    setMessage(randomWish);
+    toast({
+      title: "Magic! ✨",
+      description: "A new wish has been generated for you.",
+      duration: 2000,
+    });
+  };
+
   const generateLink = () => {
     // Check if image is a data URL (uploaded file)
     if (imageSrc.startsWith("data:")) {
@@ -144,7 +167,19 @@ export default function Home() {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="message">Message</Label>
+              <div className="flex justify-between items-center">
+                <Label htmlFor="message">Message</Label>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={generateRandomWish}
+                  className="h-6 px-2 text-xs text-pink-500 hover:text-pink-600 hover:bg-pink-50"
+                  title="Generate random wish"
+                >
+                  <Wand2 className="w-3 h-3 mr-1" />
+                  Auto-Generate
+                </Button>
+              </div>
               <Textarea 
                 id="message" 
                 placeholder="Write your wish here..." 
