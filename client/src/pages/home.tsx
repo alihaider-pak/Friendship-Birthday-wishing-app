@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Link as LinkIcon, Image as ImageIcon, ArrowLeft, Sparkles, Upload, Wand2, Music, Pause, Play, MailOpen } from "lucide-react";
+import { Link as LinkIcon, Sparkles, Upload, Wand2, Music, Pause, Play, MailOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import cakeImage from "@assets/generated_images/cute_3d_birthday_cake.png";
 
@@ -52,24 +52,21 @@ export default function Home() {
   const searchString = useSearch();
   const { toast } = useToast();
   
-  // Default state
   const [name, setName] = useState("");
   const [message, setMessage] = useState(PREDEFINED_WISHES[0]);
   const [imageSrc, setImageSrc] = useState(cakeImage);
   const [isViewMode, setIsViewMode] = useState(false);
-  const [isCardOpened, setIsCardOpened] = useState(false); // New state for "Opening the envelope"
+  const [isCardOpened, setIsCardOpened] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   
-  // Interaction state
   const [wished, setWished] = useState(false);
   const [generatedLink, setGeneratedLink] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Audio state
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentSong, setCurrentSong] = useState(HINDI_SONGS[0]);
 
-  // Initialize from URL params
   useEffect(() => {
     const params = new URLSearchParams(searchString);
     const pName = params.get("name");
@@ -81,14 +78,11 @@ export default function Home() {
       if (pName) setName(pName);
       if (pMessage) setMessage(pMessage);
       if (pImage) setImageSrc(pImage);
-      // Don't auto-play here yet, wait for user to "Open" the card
     } else {
-      // If we are creator mode, card is already "open"
       setIsCardOpened(true);
     }
   }, [searchString]);
 
-  // Handle song changes
   useEffect(() => {
     if (isPlaying && audioRef.current) {
        audioRef.current.play().catch(e => console.log("Playback prevented until interaction"));
@@ -125,26 +119,45 @@ export default function Home() {
     if (!wished) {
       triggerConfetti();
       setWished(true);
-      // Only auto-play if not already playing
       if (!isPlaying) {
         setIsPlaying(true);
       }
     }
   };
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const result = e.target?.result as string;
-        setImageSrc(result);
-        toast({
-          title: "Image Uploaded! 📸",
-          description: "Your custom image has been added to the card.",
-        });
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append("image", file);
+
+    try {
+      const response = await fetch("/api/upload-image", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Upload failed");
+      }
+
+      const data = await response.json();
+      setImageSrc(data.url);
+      toast({
+        title: "Image Uploaded! 📸",
+        description: "Your image has been uploaded and can now be shared!",
+      });
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast({
+        variant: "destructive",
+        title: "Upload Failed",
+        description: "Could not upload image. Please try again.",
+      });
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -173,7 +186,6 @@ export default function Home() {
 
   const playRandomSong = () => {
     let nextSongIndex = Math.floor(Math.random() * HINDI_SONGS.length);
-    // Try to pick a different song
     if (HINDI_SONGS.length > 1 && HINDI_SONGS[nextSongIndex].url === currentSong.url) {
       nextSongIndex = (nextSongIndex + 1) % HINDI_SONGS.length;
     }
@@ -181,19 +193,9 @@ export default function Home() {
     const nextSong = HINDI_SONGS[nextSongIndex];
     setCurrentSong(nextSong);
     setIsPlaying(true); 
-    // The useEffect [currentSong] will handle the actual .play() call
   };
 
   const generateLink = () => {
-    if (imageSrc.startsWith("data:")) {
-      toast({
-        variant: "destructive",
-        title: "Cannot Share Uploaded Image",
-        description: "Uploaded images are too large to share via link. Please use an Image URL instead for sharing.",
-      });
-      return;
-    }
-
     const params = new URLSearchParams();
     if (name) params.set("name", name);
     if (message) params.set("message", message);
@@ -219,13 +221,10 @@ export default function Home() {
 
   const openCard = () => {
     setIsCardOpened(true);
-    setIsPlaying(true); // Auto-play music when opening the card!
+    setIsPlaying(true);
     triggerConfetti();
   };
 
-  // ---------------------------------------------------------------------------
-  // RENDER: Opening Envelope Screen (For View Mode Initial State)
-  // ---------------------------------------------------------------------------
   if (isViewMode && !isCardOpened) {
     return (
        <div className="min-h-screen w-full bg-gradient-to-br from-pink-50 to-sky-50 flex items-center justify-center p-4 font-sans">
@@ -244,9 +243,6 @@ export default function Home() {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // RENDER: Creator Mode
-  // ---------------------------------------------------------------------------
   if (!isViewMode) {
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-pink-50 to-sky-50 flex items-center justify-center p-4 font-sans">
@@ -265,6 +261,7 @@ export default function Home() {
                 placeholder="e.g. Sarah" 
                 value={name} 
                 onChange={(e) => setName(e.target.value)} 
+                data-testid="input-name"
               />
             </div>
             
@@ -277,6 +274,7 @@ export default function Home() {
                   onClick={generateRandomWish}
                   className="h-6 px-2 text-xs text-pink-500 hover:text-pink-600 hover:bg-pink-50"
                   title="Generate random wish"
+                  data-testid="button-generate-wish"
                 >
                   <Wand2 className="w-3 h-3 mr-1" />
                   Auto-Generate
@@ -288,6 +286,7 @@ export default function Home() {
                 value={message} 
                 onChange={(e) => setMessage(e.target.value)} 
                 className="min-h-[100px]"
+                data-testid="textarea-message"
               />
             </div>
 
@@ -298,9 +297,10 @@ export default function Home() {
                   <Input 
                     id="image" 
                     placeholder="https://example.com/photo.jpg" 
-                    value={imageSrc.startsWith("data:") ? "" : (imageSrc === cakeImage ? "" : imageSrc)} 
+                    value={imageSrc === cakeImage ? "" : (imageSrc.startsWith("/uploads/") ? "" : imageSrc)} 
                     onChange={(e) => setImageSrc(e.target.value || cakeImage)} 
-                    disabled={imageSrc.startsWith("data:")}
+                    disabled={isUploading}
+                    data-testid="input-image-url"
                   />
                   <input 
                     type="file" 
@@ -314,26 +314,30 @@ export default function Home() {
                     size="icon" 
                     className="shrink-0"
                     onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
                     title="Upload Image"
+                    data-testid="button-upload-image"
                   >
-                    <Upload className="w-4 h-4" />
+                    {isUploading ? (
+                      <div className="w-4 h-4 border-2 border-pink-500 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Upload className="w-4 h-4" />
+                    )}
                   </Button>
                 </div>
-                {imageSrc.startsWith("data:") && (
-                  <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-100 flex items-center gap-2">
-                     <span>⚠️ Uploaded images are for local preview only and cannot be shared via link.</span>
-                     <Button variant="link" size="sm" className="h-auto p-0 text-amber-700" onClick={() => setImageSrc(cakeImage)}>Clear</Button>
+                {imageSrc.startsWith("/uploads/") && (
+                  <div className="text-xs text-green-600 bg-green-50 p-2 rounded border border-green-100 flex items-center justify-between">
+                     <span>✅ Image uploaded successfully and ready to share!</span>
+                     <Button variant="link" size="sm" className="h-auto p-0 text-green-700" onClick={() => setImageSrc(cakeImage)}>Clear</Button>
                   </div>
                 )}
-                {!imageSrc.startsWith("data:") && (
-                  <p className="text-xs text-slate-500">
-                    Use an Image URL to share custom photos, or upload for local preview.
-                  </p>
-                )}
+                <p className="text-xs text-slate-500">
+                  Upload an image or paste an image URL.
+                </p>
               </div>
             </div>
 
-            <Button onClick={generateLink} className="w-full bg-pink-500 hover:bg-pink-600 text-white font-bold">
+            <Button onClick={generateLink} className="w-full bg-pink-500 hover:bg-pink-600 text-white font-bold" data-testid="button-generate-link">
               <LinkIcon className="w-4 h-4 mr-2" />
               Generate & Copy Link
             </Button>
@@ -343,6 +347,7 @@ export default function Home() {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 className="p-4 bg-green-50 text-green-700 rounded-lg text-sm break-all border border-green-100"
+                data-testid="text-generated-link"
               >
                 {generatedLink}
               </motion.div>
@@ -353,7 +358,7 @@ export default function Home() {
                <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-slate-500">Preview</span></div>
             </div>
 
-            <Button variant="secondary" onClick={() => setIsViewMode(true)} className="w-full">
+            <Button variant="secondary" onClick={() => setIsViewMode(true)} className="w-full" data-testid="button-preview">
               Preview Card
             </Button>
           </CardContent>
@@ -362,15 +367,10 @@ export default function Home() {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // RENDER: View Mode (The Card)
-  // ---------------------------------------------------------------------------
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-pink-50 to-sky-50 flex items-center justify-center p-4 font-sans overflow-hidden relative">
-      {/* Hidden Audio Element */}
       <audio ref={audioRef} src={currentSong.url} onEnded={() => setIsPlaying(false)} />
 
-      {/* Floating background elements */}
       <motion.div 
         className="absolute top-10 left-10 w-20 h-20 bg-yellow-200 rounded-full blur-2xl opacity-50"
         animate={{ y: [0, 20, 0], scale: [1, 1.1, 1] }}
@@ -389,13 +389,13 @@ export default function Home() {
         className="w-full max-w-md z-10"
       >
         <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm overflow-hidden relative">
-          {/* Back Button for Creator context */}
           <Button 
             variant="ghost" 
             size="icon" 
             className="absolute top-2 right-2 text-slate-400 hover:text-slate-600 z-20"
             onClick={resetToCreator}
             title="Create your own"
+            data-testid="button-create-own"
           >
             <Sparkles className="w-4 h-4" />
           </Button>
@@ -414,18 +414,17 @@ export default function Home() {
                 alt="Birthday Visual" 
                 className="w-48 h-48 object-cover rounded-2xl shadow-sm relative z-10 rotate-3 hover:rotate-0 transition-transform duration-500 bg-white"
                 onError={(e) => {
-                  // Fallback if image fails to load
                   e.currentTarget.src = cakeImage; 
                 }}
                 data-testid="img-cake"
               />
-              {/* Music Control Overlay on Image */}
               <div className="absolute bottom-2 right-2 z-20">
                  <Button 
                     size="icon" 
                     className="h-8 w-8 rounded-full bg-white/90 hover:bg-white text-pink-500 shadow-md"
                     onClick={togglePlay}
                     title={isPlaying ? "Pause Music" : "Play Music"}
+                    data-testid="button-toggle-music"
                  >
                     {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
                  </Button>
@@ -475,6 +474,7 @@ export default function Home() {
                 variant="outline"
                 onClick={playRandomSong}
                 className="w-full h-10 text-sm font-medium text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-800"
+                data-testid="button-play-another"
               >
                 <Music className="w-4 h-4 mr-2" />
                 Play Another Song
