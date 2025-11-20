@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import { useLocation, useSearch } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Copy, Link as LinkIcon, Image as ImageIcon, ArrowLeft, Sparkles, Upload, Wand2, Music, Pause, Play } from "lucide-react";
+import { Link as LinkIcon, Image as ImageIcon, ArrowLeft, Sparkles, Upload, Wand2, Music, Pause, Play, MailOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import cakeImage from "@assets/generated_images/cute_3d_birthday_cake.png";
 
@@ -57,6 +57,7 @@ export default function Home() {
   const [message, setMessage] = useState(PREDEFINED_WISHES[0]);
   const [imageSrc, setImageSrc] = useState(cakeImage);
   const [isViewMode, setIsViewMode] = useState(false);
+  const [isCardOpened, setIsCardOpened] = useState(false); // New state for "Opening the envelope"
   
   // Interaction state
   const [wished, setWished] = useState(false);
@@ -80,17 +81,19 @@ export default function Home() {
       if (pName) setName(pName);
       if (pMessage) setMessage(pMessage);
       if (pImage) setImageSrc(pImage);
+      // Don't auto-play here yet, wait for user to "Open" the card
+    } else {
+      // If we are creator mode, card is already "open"
+      setIsCardOpened(true);
     }
   }, [searchString]);
 
-  // Clean up audio on unmount
+  // Handle song changes
   useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
-    };
-  }, []);
+    if (isPlaying && audioRef.current) {
+       audioRef.current.play().catch(e => console.log("Playback prevented until interaction"));
+    }
+  }, [currentSong, isPlaying]);
 
   const triggerConfetti = () => {
     const end = Date.now() + 3 * 1000;
@@ -122,7 +125,10 @@ export default function Home() {
     if (!wished) {
       triggerConfetti();
       setWished(true);
-      playRandomSong(); // Auto play song on wish!
+      // Only auto-play if not already playing
+      if (!isPlaying) {
+        setIsPlaying(true);
+      }
     }
   };
 
@@ -159,11 +165,6 @@ export default function Home() {
       } else {
         audioRef.current.play().catch(e => {
           console.error("Audio playback failed:", e);
-          toast({
-            variant: "destructive",
-            title: "Playback Error",
-            description: "Could not play audio. Please check your device settings.",
-          });
         });
       }
       setIsPlaying(!isPlaying);
@@ -171,32 +172,19 @@ export default function Home() {
   };
 
   const playRandomSong = () => {
-    // Pick a random song different from current if possible
     let nextSongIndex = Math.floor(Math.random() * HINDI_SONGS.length);
+    // Try to pick a different song
     if (HINDI_SONGS.length > 1 && HINDI_SONGS[nextSongIndex].url === currentSong.url) {
       nextSongIndex = (nextSongIndex + 1) % HINDI_SONGS.length;
     }
     
     const nextSong = HINDI_SONGS[nextSongIndex];
     setCurrentSong(nextSong);
-    
-    // Need to wait for state update or just set src directly
-    if (audioRef.current) {
-      audioRef.current.src = nextSong.url;
-      audioRef.current.play().then(() => {
-        setIsPlaying(true);
-        toast({
-          title: "Now Playing 🎵",
-          description: nextSong.title,
-        });
-      }).catch(e => {
-        console.error("Audio playback failed:", e);
-      });
-    }
+    setIsPlaying(true); 
+    // The useEffect [currentSong] will handle the actual .play() call
   };
 
   const generateLink = () => {
-    // Check if image is a data URL (uploaded file)
     if (imageSrc.startsWith("data:")) {
       toast({
         variant: "destructive",
@@ -222,15 +210,43 @@ export default function Home() {
 
   const resetToCreator = () => {
     setIsViewMode(false);
+    setIsCardOpened(true);
     setGeneratedLink("");
     setLocation("/");
-    // Stop music when going back
-    if (audioRef.current) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-    }
+    setIsPlaying(false);
+    if (audioRef.current) audioRef.current.pause();
   };
 
+  const openCard = () => {
+    setIsCardOpened(true);
+    setIsPlaying(true); // Auto-play music when opening the card!
+    triggerConfetti();
+  };
+
+  // ---------------------------------------------------------------------------
+  // RENDER: Opening Envelope Screen (For View Mode Initial State)
+  // ---------------------------------------------------------------------------
+  if (isViewMode && !isCardOpened) {
+    return (
+       <div className="min-h-screen w-full bg-gradient-to-br from-pink-50 to-sky-50 flex items-center justify-center p-4 font-sans">
+          <motion.div 
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="text-center"
+          >
+            <Card className="w-80 h-60 bg-pink-100 border-4 border-white shadow-2xl flex flex-col items-center justify-center cursor-pointer hover:scale-105 transition-transform duration-300" onClick={openCard}>
+               <MailOpen className="w-20 h-20 text-pink-500 mb-4" />
+               <h2 className="text-2xl font-['Pacifico'] text-pink-600">You have a surprise!</h2>
+               <p className="text-slate-500 mt-2 text-sm">Tap to open</p>
+            </Card>
+          </motion.div>
+       </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // RENDER: Creator Mode
+  // ---------------------------------------------------------------------------
   if (!isViewMode) {
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-pink-50 to-sky-50 flex items-center justify-center p-4 font-sans">
@@ -346,7 +362,9 @@ export default function Home() {
     );
   }
 
-  // View Mode (The Card)
+  // ---------------------------------------------------------------------------
+  // RENDER: View Mode (The Card)
+  // ---------------------------------------------------------------------------
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-pink-50 to-sky-50 flex items-center justify-center p-4 font-sans overflow-hidden relative">
       {/* Hidden Audio Element */}
