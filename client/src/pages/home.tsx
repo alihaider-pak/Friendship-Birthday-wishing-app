@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
 import { useLocation, useSearch } from "wouter";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Copy, Link as LinkIcon, Image as ImageIcon, ArrowLeft, Sparkles } from "lucide-react";
+import { Copy, Link as LinkIcon, Image as ImageIcon, ArrowLeft, Sparkles, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import cakeImage from "@assets/generated_images/cute_3d_birthday_cake.png";
 
@@ -25,6 +25,7 @@ export default function Home() {
   // Interaction state
   const [wished, setWished] = useState(false);
   const [generatedLink, setGeneratedLink] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize from URL params
   useEffect(() => {
@@ -74,7 +75,33 @@ export default function Home() {
     }
   };
 
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        setImageSrc(result);
+        toast({
+          title: "Image Uploaded! 📸",
+          description: "Your custom image has been added to the card.",
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const generateLink = () => {
+    // Check if image is a data URL (uploaded file)
+    if (imageSrc.startsWith("data:")) {
+      toast({
+        variant: "destructive",
+        title: "Cannot Share Uploaded Image",
+        description: "Uploaded images are too large to share via link. Please use an Image URL instead for sharing.",
+      });
+      return;
+    }
+
     const params = new URLSearchParams();
     if (name) params.set("name", name);
     if (message) params.set("message", message);
@@ -128,21 +155,45 @@ export default function Home() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="image">Image URL (Optional)</Label>
-              <div className="flex gap-2">
-                <Input 
-                  id="image" 
-                  placeholder="https://example.com/photo.jpg" 
-                  value={imageSrc === cakeImage ? "" : imageSrc} 
-                  onChange={(e) => setImageSrc(e.target.value || cakeImage)} 
-                />
-                <Button variant="outline" size="icon" className="shrink-0">
-                  <ImageIcon className="w-4 h-4" />
-                </Button>
+              <Label htmlFor="image">Image</Label>
+              <div className="flex flex-col gap-3">
+                <div className="flex gap-2">
+                  <Input 
+                    id="image" 
+                    placeholder="https://example.com/photo.jpg" 
+                    value={imageSrc.startsWith("data:") ? "" : (imageSrc === cakeImage ? "" : imageSrc)} 
+                    onChange={(e) => setImageSrc(e.target.value || cakeImage)} 
+                    disabled={imageSrc.startsWith("data:")}
+                  />
+                  <input 
+                    type="file" 
+                    ref={fileInputRef}
+                    onChange={handleImageUpload}
+                    className="hidden"
+                    accept="image/*"
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    className="shrink-0"
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Upload Image"
+                  >
+                    <Upload className="w-4 h-4" />
+                  </Button>
+                </div>
+                {imageSrc.startsWith("data:") && (
+                  <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-100 flex items-center gap-2">
+                     <span>⚠️ Uploaded images are for local preview only and cannot be shared via link.</span>
+                     <Button variant="link" size="sm" className="h-auto p-0 text-amber-700" onClick={() => setImageSrc(cakeImage)}>Clear</Button>
+                  </div>
+                )}
+                {!imageSrc.startsWith("data:") && (
+                  <p className="text-xs text-slate-500">
+                    Use an Image URL to share custom photos, or upload for local preview.
+                  </p>
+                )}
               </div>
-              <p className="text-xs text-slate-500">
-                Paste a direct link to an image to customize the card.
-              </p>
             </div>
 
             <Button onClick={generateLink} className="w-full bg-pink-500 hover:bg-pink-600 text-white font-bold">
