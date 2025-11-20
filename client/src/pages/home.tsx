@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Copy, Link as LinkIcon, Image as ImageIcon, ArrowLeft, Sparkles, Upload, Wand2 } from "lucide-react";
+import { Copy, Link as LinkIcon, Image as ImageIcon, ArrowLeft, Sparkles, Upload, Wand2, Music, Pause, Play } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import cakeImage from "@assets/generated_images/cute_3d_birthday_cake.png";
 
@@ -22,6 +22,29 @@ const PREDEFINED_WISHES = [
   "Hope your birthday is as awesome as you are! 🎸",
   "Eat cake, celebrate, and enjoy your special day! 🍰",
   "May your day be filled with love, laughter, and unforgettable moments! ❤️"
+];
+
+const HINDI_SONGS = [
+  {
+    title: "Classic Happy Birthday (Mohammad Rafi)",
+    url: "https://archive.org/download/BestBirthdaySongsHindi/MOHAMMAD%20RAFI%20-%20HAPPY%20BIRTHDAY%20TO%20YOU%20-%20EK%20PHOOL%20DO%20MALI%201969.mp3"
+  },
+  {
+    title: "Happy Birthday (Udit Narayan)",
+    url: "https://archive.org/download/BestBirthdaySongsHindi/Teri%20Hasi%20Mein%20%28Happy%20Birthday%20To%20You%29%20Udit%20Narayan%20Rare%20Song%20To%20Neelesh.mp3"
+  },
+  {
+    title: "Funny Teddy Bear Song",
+    url: "https://archive.org/download/BestBirthdaySongsHindi/Life%20Bekar%20Hai-Cute%20Teddy%20Bear%20Singing%20Funny%20Hindi%20Song%20Lyrics.mp3"
+  },
+  {
+    title: "Happy Birthday Instrumental",
+    url: "https://archive.org/download/BestBirthdaySongsHindi/Happy%20Birthday.mp3"
+  },
+  {
+    title: "Romantic Birthday Song",
+    url: "https://archive.org/download/BestBirthdaySongsHindi/Romantic%20Happy%20Birthday%20Song.mp3"
+  }
 ];
 
 export default function Home() {
@@ -40,6 +63,11 @@ export default function Home() {
   const [generatedLink, setGeneratedLink] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Audio state
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentSong, setCurrentSong] = useState(HINDI_SONGS[0]);
+
   // Initialize from URL params
   useEffect(() => {
     const params = new URLSearchParams(searchString);
@@ -54,6 +82,15 @@ export default function Home() {
       if (pImage) setImageSrc(pImage);
     }
   }, [searchString]);
+
+  // Clean up audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+    };
+  }, []);
 
   const triggerConfetti = () => {
     const end = Date.now() + 3 * 1000;
@@ -85,6 +122,7 @@ export default function Home() {
     if (!wished) {
       triggerConfetti();
       setWished(true);
+      playRandomSong(); // Auto play song on wish!
     }
   };
 
@@ -112,6 +150,49 @@ export default function Home() {
       description: "A new wish has been generated for you.",
       duration: 2000,
     });
+  };
+
+  const togglePlay = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play().catch(e => {
+          console.error("Audio playback failed:", e);
+          toast({
+            variant: "destructive",
+            title: "Playback Error",
+            description: "Could not play audio. Please check your device settings.",
+          });
+        });
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const playRandomSong = () => {
+    // Pick a random song different from current if possible
+    let nextSongIndex = Math.floor(Math.random() * HINDI_SONGS.length);
+    if (HINDI_SONGS.length > 1 && HINDI_SONGS[nextSongIndex].url === currentSong.url) {
+      nextSongIndex = (nextSongIndex + 1) % HINDI_SONGS.length;
+    }
+    
+    const nextSong = HINDI_SONGS[nextSongIndex];
+    setCurrentSong(nextSong);
+    
+    // Need to wait for state update or just set src directly
+    if (audioRef.current) {
+      audioRef.current.src = nextSong.url;
+      audioRef.current.play().then(() => {
+        setIsPlaying(true);
+        toast({
+          title: "Now Playing 🎵",
+          description: nextSong.title,
+        });
+      }).catch(e => {
+        console.error("Audio playback failed:", e);
+      });
+    }
   };
 
   const generateLink = () => {
@@ -143,6 +224,11 @@ export default function Home() {
     setIsViewMode(false);
     setGeneratedLink("");
     setLocation("/");
+    // Stop music when going back
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    }
   };
 
   if (!isViewMode) {
@@ -263,6 +349,9 @@ export default function Home() {
   // View Mode (The Card)
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-pink-50 to-sky-50 flex items-center justify-center p-4 font-sans overflow-hidden relative">
+      {/* Hidden Audio Element */}
+      <audio ref={audioRef} src={currentSong.url} onEnded={() => setIsPlaying(false)} />
+
       {/* Floating background elements */}
       <motion.div 
         className="absolute top-10 left-10 w-20 h-20 bg-yellow-200 rounded-full blur-2xl opacity-50"
@@ -312,6 +401,17 @@ export default function Home() {
                 }}
                 data-testid="img-cake"
               />
+              {/* Music Control Overlay on Image */}
+              <div className="absolute bottom-2 right-2 z-20">
+                 <Button 
+                    size="icon" 
+                    className="h-8 w-8 rounded-full bg-white/90 hover:bg-white text-pink-500 shadow-md"
+                    onClick={togglePlay}
+                    title={isPlaying ? "Pause Music" : "Play Music"}
+                 >
+                    {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+                 </Button>
+              </div>
             </motion.div>
 
             <div className="space-y-2">
@@ -339,7 +439,7 @@ export default function Home() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.9 }}
-              className="w-full pt-2"
+              className="w-full pt-2 space-y-3"
             >
               <Button 
                 onClick={handleWish}
@@ -351,6 +451,15 @@ export default function Home() {
                 data-testid="button-wish"
               >
                 {wished ? "Yay! Wishes Sent! 🎉" : "Make a Wish ✨"}
+              </Button>
+              
+              <Button 
+                variant="outline"
+                onClick={playRandomSong}
+                className="w-full h-10 text-sm font-medium text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-800"
+              >
+                <Music className="w-4 h-4 mr-2" />
+                Play Another Song
               </Button>
             </motion.div>
           </CardContent>
